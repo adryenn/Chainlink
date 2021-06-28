@@ -13,7 +13,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/pkg/errors"
-	"github.com/smartcontractkit/chainlink/core/service"
 	"github.com/smartcontractkit/chainlink/core/services/cron"
 	"github.com/smartcontractkit/chainlink/core/services/feeds"
 	"github.com/smartcontractkit/chainlink/core/services/fluxmonitorv2"
@@ -120,7 +119,7 @@ type ChainlinkApplication struct {
 	shutdownSignal           gracefulpanic.Signal
 	balanceMonitor           services.BalanceMonitor
 	explorerClient           synchronization.ExplorerClient
-	subservices              []service.Service
+	svcs                     *Services
 	HealthChecker            health.Checker
 	logger                   *logger.Logger
 
@@ -133,7 +132,7 @@ type ChainlinkApplication struct {
 // the logger at the same directory and returns the Application to
 // be used by the node.
 func NewApplication(config *orm.Config, ethClient eth.Client, advisoryLocker postgres.AdvisoryLocker, onConnectCallbacks ...func(Application)) (Application, error) {
-	var subservices []service.Service
+	svcs := NewServices()
 
 	shutdownSignal := gracefulpanic.NewSignal()
 	store, err := strpkg.NewStore(config, ethClient, advisoryLocker, shutdownSignal)
@@ -157,13 +156,14 @@ func NewApplication(config *orm.Config, ethClient eth.Client, advisoryLocker pos
 		statsPusher = synchronization.NewStatsPusher(store.DB, explorerClient)
 		monitoringEndpoint = telemetry.NewAgent(explorerClient)
 	}
-	subservices = append(subservices, explorerClient, statsPusher)
+	svcs.Register(explorerClient)
+	svcs.Register(statsPusher)
 
 	var gasUpdater gasupdater.GasUpdater
 	if store.Config.GasUpdaterEnabled() {
 		logger.Debugw("GasUpdater: dynamic gas updates are enabled", "ethGasPriceDefault", store.Config.EthGasPriceDefault())
 		gasUpdater = gasupdater.NewGasUpdater(store.EthClient, store.Config)
-		subservices = append(subservices, gasUpdater)
+		svcs.Register(gasUpdater)
 	} else {
 		logger.Debugw("GasUpdater: dynamic gas updating is disabled", "ethGasPriceDefault", store.Config.EthGasPriceDefault())
 	}
@@ -172,7 +172,7 @@ func NewApplication(config *orm.Config, ethClient eth.Client, advisoryLocker pos
 		logger.Infow("DatabaseBackup: periodic database backups are enabled", "frequency", store.Config.DatabaseBackupFrequency())
 
 		databaseBackup := periodicbackup.NewDatabaseBackup(store.Config, logger.Default)
-		subservices = append(subservices, databaseBackup)
+		svcs.Register(databaseBackup)
 	} else {
 		logger.Info("DatabaseBackup: periodic database backups are disabled. To enable automatic backups, set DATABASE_BACKUP_MODE=lite or DATABASE_BACKUP_MODE=full")
 	}
@@ -219,7 +219,7 @@ func NewApplication(config *orm.Config, ethClient eth.Client, advisoryLocker pos
 	}
 
 	eventBroadcaster := postgres.NewEventBroadcaster(config.DatabaseURL(), config.DatabaseListenerMinReconnectInterval(), config.DatabaseListenerMaxReconnectDuration())
-	subservices = append(subservices, eventBroadcaster)
+	svcs.Register(eventBroadcaster)
 
 	feedsORM := feeds.NewORM(store.DB)
 	feedsService := feeds.NewService(feedsORM)
@@ -237,16 +237,15 @@ func NewApplication(config *orm.Config, ethClient eth.Client, advisoryLocker pos
 		}
 
 		logBroadcaster = log.NewBroadcaster(log.NewORM(store.DB), ethClient, store.Config, highestSeenHead)
+		svcs.Register(logBroadcaster)
+
 		txManager = bulletprooftxmanager.NewBulletproofTxManager(store.DB, ethClient, store.Config, keyStore.Eth(), advisoryLocker, eventBroadcaster)
-		subservices = append(subservices, logBroadcaster, txManager)
+		svcs.Register(txManager)
 	}
 
 	fluxMonitor := fluxmonitor.New(store, keyStore.Eth(), runManager, logBroadcaster)
-
-	subservices = append(subservices,
-		fluxMonitor,
-		jobSubscriber,
-	)
+	svcs.Register(fluxMonitor)
+	svcs.Register(jobSubscriber)
 
 	var balanceMonitor services.BalanceMonitor
 	if config.BalanceMonitorEnabled() {
@@ -254,10 +253,10 @@ func NewApplication(config *orm.Config, ethClient eth.Client, advisoryLocker pos
 	} else {
 		balanceMonitor = &services.NullBalanceMonitor{}
 	}
-	subservices = append(subservices, balanceMonitor)
+	svcs.Register(balanceMonitor)
 
 	promReporter := services.NewPromReporter(store.MustSQLDB())
-	subservices = append(subservices, promReporter)
+	svcs.Register(promReporter)
 
 	var (
 		pipelineORM    = pipeline.NewORM(store.ORM.DB, store.Config)
@@ -265,7 +264,6 @@ func NewApplication(config *orm.Config, ethClient eth.Client, advisoryLocker pos
 		jobORM         = job.NewORM(store.ORM.DB, store.Config, pipelineORM, eventBroadcaster, advisoryLocker)
 	)
 
-	// vorm := vrf.NewORM(store.DB)
 	var (
 		delegates = map[job.Type]job.Delegate{
 			job.DirectRequest: directrequest.NewDelegate(
@@ -315,7 +313,7 @@ func NewApplication(config *orm.Config, ethClient eth.Client, advisoryLocker pos
 	if (config.Dev() && config.P2PListenPort() > 0) || config.FeatureOffchainReporting() {
 		logger.Debug("Off-chain reporting enabled")
 		concretePW := offchainreporting.NewSingletonPeerWrapper(keyStore.OCR(), config, store.DB)
-		subservices = append(subservices, concretePW)
+		svcs.Register(concretePW)
 		delegates[job.OffchainReporting] = offchainreporting.NewDelegate(
 			store.DB,
 			txManager,
@@ -348,7 +346,9 @@ func NewApplication(config *orm.Config, ethClient eth.Client, advisoryLocker pos
 	}
 
 	jobSpawner := job.NewSpawner(jobORM, store.Config, delegates)
-	subservices = append(subservices, jobSpawner, pipelineRunner, headBroadcaster)
+	svcs.Register(jobSpawner)
+	svcs.Register(pipelineRunner)
+	svcs.Register(headBroadcaster)
 
 	app := &ChainlinkApplication{
 		HeadBroadcaster:          headBroadcaster,
@@ -377,9 +377,9 @@ func NewApplication(config *orm.Config, ethClient eth.Client, advisoryLocker pos
 		explorerClient:           explorerClient,
 		HealthChecker:            healthChecker,
 		logger:                   globalLogger,
-		// NOTE: Can keep things clean by putting more things in subservices
+		// NOTE: Can keep things clean by putting more things in svcs
 		// instead of manually start/closing
-		subservices: subservices,
+		svcs: svcs,
 	}
 
 	headBroadcaster.Subscribe(logBroadcaster)
@@ -404,8 +404,8 @@ func NewApplication(config *orm.Config, ethClient eth.Client, advisoryLocker pos
 	// until app.LogBroadcaster.DependentReady() call (see below)
 	logBroadcaster.AddDependents(1)
 
-	for _, service := range app.subservices {
-		if err = app.HealthChecker.Register(reflect.TypeOf(service).String(), service); err != nil {
+	for _, r := range app.svcs.Runners {
+		if err = app.HealthChecker.Register(reflect.TypeOf(r.svc).String(), r.svc); err != nil {
 			return nil, err
 		}
 	}
@@ -492,11 +492,9 @@ func (app *ChainlinkApplication) Start() error {
 		return err
 	}
 
-	for _, subservice := range app.subservices {
-		logger.Debugw("Starting service...", "serviceType", reflect.TypeOf(subservice))
-		if err := subservice.Start(); err != nil {
-			return err
-		}
+	// Run the services
+	if err := app.svcs.Run(); err != nil {
+		return err
 	}
 
 	// Log Broadcaster fully starts after all initial Register calls are done from other starting services
@@ -571,11 +569,7 @@ func (app *ChainlinkApplication) stop() error {
 		logger.Debug("Stopping HeadTracker...")
 		merr = multierr.Append(merr, app.HeadTracker.Stop())
 
-		for i := len(app.subservices) - 1; i >= 0; i-- {
-			service := app.subservices[i]
-			logger.Debugw("Closing service...", "serviceType", reflect.TypeOf(service))
-			merr = multierr.Append(merr, service.Close())
-		}
+		merr = app.svcs.Shutdown(merr)
 
 		logger.Debug("Closing RunQueue...")
 		merr = multierr.Append(merr, app.RunQueue.Close())
