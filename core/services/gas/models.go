@@ -46,6 +46,7 @@ func applyMultiplier(gasLimit uint64, multiplier float32) uint64 {
 }
 
 // Config defines an interface for configuration in the gas package
+//go:generate mockery --name Config --output ./mocks/ --case=underscore
 type Config interface {
 	BlockHistoryEstimatorBatchSize() uint32
 	BlockHistoryEstimatorBlockDelay() uint16
