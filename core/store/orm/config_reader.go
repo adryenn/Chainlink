@@ -82,7 +82,6 @@ type ConfigReader interface {
 	MinimumServiceDuration() models.Duration
 	OCRTraceLogging() bool
 	OperatorContractAddress() common.Address
-	OptimismGasFees() bool
 	Port() uint16
 	ReaperExpiration() models.Duration
 	RootDir() string

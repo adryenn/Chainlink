@@ -163,7 +163,7 @@ func (t *Transaction) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func bumpGasPriceOnly(config Config, originalGasPrice *big.Int, originalGasLimit uint64) (gasPrice *big.Int, chainSpecificGasLimit uint64, err error) {
+func BumpGasPriceOnly(config Config, originalGasPrice *big.Int, originalGasLimit uint64) (gasPrice *big.Int, chainSpecificGasLimit uint64, err error) {
 	gasPrice, err = bumpGasPrice(config, originalGasPrice)
 	if err != nil {
 		return nil, 0, err

@@ -100,7 +100,7 @@ type EthTxAttempt struct {
 	EthTx    EthTx `gorm:"foreignkey:EthTxID;->"`
 	GasPrice utils.Big
 	// ChainSpecificGasLimit on the EthTxAttempt is always the same as the on-chain encoded value for gas limit
-	ChainSpecificGasLimit   utils.Big
+	ChainSpecificGasLimit   uint64
 	SignedRawTx             []byte
 	Hash                    common.Hash
 	CreatedAt               time.Time

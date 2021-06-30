@@ -107,7 +107,6 @@ type EnvPrinter struct {
 	OCRDHTLookupInterval                       int             `json:"OCR_DHT_LOOKUP_INTERVAL"`
 	OCRTraceLogging                            bool            `json:"OCR_TRACE_LOGGING"`
 	OperatorContractAddress                    common.Address  `json:"OPERATOR_CONTRACT_ADDRESS"`
-	OptimismGasFees                            bool            `json:"OPTIMISM_GAS_FEES"`
 	Port                                       uint16          `json:"CHAINLINK_PORT"`
 	ReaperExpiration                           models.Duration `json:"REAPER_EXPIRATION"`
 	ReplayFromBlock                            int64           `json:"REPLAY_FROM_BLOCK"`
@@ -205,7 +204,6 @@ func NewConfigPrinter(store *store.Store) (ConfigPrinter, error) {
 			TriggerFallbackDBPollInterval:              config.TriggerFallbackDBPollInterval(),
 			OCRTraceLogging:                            config.OCRTraceLogging(),
 			OperatorContractAddress:                    config.OperatorContractAddress(),
-			OptimismGasFees:                            config.OptimismGasFees(),
 			Port:                                       config.Port(),
 			ReaperExpiration:                           config.ReaperExpiration(),
 			ReplayFromBlock:                            config.ReplayFromBlock(),

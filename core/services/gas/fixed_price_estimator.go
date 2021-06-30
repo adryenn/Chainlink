@@ -9,7 +9,6 @@ import (
 
 var _ Estimator = &fixedPriceEstimator{}
 
-// TODO: Separate tracker/estimator? can it be done?
 type fixedPriceEstimator struct {
 	config Config
 }
@@ -29,5 +28,5 @@ func (f *fixedPriceEstimator) EstimateGas(_ []byte, gasLimit uint64) (gasPrice *
 }
 
 func (f *fixedPriceEstimator) BumpGas(originalGasPrice *big.Int, originalGasLimit uint64) (gasPrice *big.Int, gasLimit uint64, err error) {
-	return bumpGasPriceOnly(f.config, originalGasPrice, originalGasLimit)
+	return BumpGasPriceOnly(f.config, originalGasPrice, originalGasLimit)
 }

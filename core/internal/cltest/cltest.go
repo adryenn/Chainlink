@@ -326,9 +326,15 @@ func NewEthBroadcaster(t testing.TB, store *strpkg.Store, keyStore bulletprooftx
 	eventBroadcaster := postgres.NewEventBroadcaster(config.DatabaseURL(), 0, 0)
 	err := eventBroadcaster.Start()
 	require.NoError(t, err)
-	return bulletprooftxmanager.NewEthBroadcaster(store.DB, store.EthClient, config, keyStore, &postgres.NullAdvisoryLocker{}, eventBroadcaster, keys), func() {
-		eventBroadcaster.Close()
+	return bulletprooftxmanager.NewEthBroadcaster(store.DB, store.EthClient, config, keyStore, &postgres.NullAdvisoryLocker{}, eventBroadcaster, keys, gas.NewFixedPriceEstimator(config)), func() {
+		assert.NoError(t, eventBroadcaster.Close())
 	}
+}
+
+func NewEthConfirmer(t testing.TB, db *gorm.DB, ethClient eth.Client, config *TestConfig, ks bulletprooftxmanager.KeyStore, keys []ethkey.Key) *bulletprooftxmanager.EthConfirmer {
+	t.Helper()
+	ec := bulletprooftxmanager.NewEthConfirmer(db, ethClient, config, ks, &postgres.NullAdvisoryLocker{}, keys, gas.NewFixedPriceEstimator(config))
+	return ec
 }
 
 // TestApplication holds the test application and test servers

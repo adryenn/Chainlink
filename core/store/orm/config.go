@@ -870,10 +870,11 @@ func (c Config) GasEstimatorMode() string {
 	}
 	if c.viper.IsSet(EnvVarName("BlockHistoryEstimatorEnabled")) {
 		if c.viper.GetBool(EnvVarName("BlockHistoryEstimatorEnabled")) {
+			logger.Warn("GAS_UPDATER_ENABLED has been deprecated, to enable the block history estimator, please use GAS_ESTIMATOR_MODE=BlockHistory instead")
 			return "BlockHistory"
-		} else {
-			return "FixedPrice"
 		}
+		logger.Warn("GAS_UPDATER_ENABLED has been deprecated, to disable the block history estimator, please use GAS_ESTIMATOR_MODE=FixedPrice instead")
+		return "FixedPrice"
 	}
 	return chainSpecificConfig(c).GasEstimatorMode
 }
@@ -1123,15 +1124,6 @@ func (c Config) OperatorContractAddress() common.Address {
 		return common.Address{}
 	}
 	return *address
-}
-
-// OptimismGasFees enables asking the network for gas price before submitting
-// transactions, enabling compatibility with Optimism's L2 chain
-func (c Config) OptimismGasFees() bool {
-	if c.viper.IsSet(EnvVarName("OptimismGasFees")) {
-		return c.viper.GetBool(EnvVarName("OptimismGasFees"))
-	}
-	return c.Chain().IsOptimism()
 }
 
 // LogLevel represents the maximum level of log messages to output.

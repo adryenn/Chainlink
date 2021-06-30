@@ -124,7 +124,7 @@ func TestIntegration_HttpRequestWithHeaders(t *testing.T) {
 
 	confirmed := int64(23456)
 	safe := confirmed + int64(config.MinRequiredOutgoingConfirmations())
-	inLongestChain := safe - int64(config.GasUpdaterBlockDelay())
+	inLongestChain := safe - int64(config.BlockHistoryEstimatorBlockDelay())
 
 	ethClient.On("SubscribeNewHead", mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) { chchNewHeads <- args.Get(1).(chan<- *models.Head) }).
@@ -1185,7 +1185,7 @@ func TestIntegration_FluxMonitor_Deviation(t *testing.T) {
 
 	confirmed := int64(23456)
 	safe := confirmed + int64(config.MinRequiredOutgoingConfirmations())
-	inLongestChain := safe - int64(config.GasUpdaterBlockDelay())
+	inLongestChain := safe - int64(config.BlockHistoryEstimatorBlockDelay())
 
 	ethClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).Maybe().Return(logsSub, nil)
 	ethClient.On("FilterLogs", mock.Anything, mock.Anything).Maybe().Return([]types.Log{}, nil)
@@ -1317,7 +1317,7 @@ func TestIntegration_FluxMonitor_NewRound(t *testing.T) {
 
 	confirmed := int64(23456)
 	safe := confirmed + int64(config.MinRequiredOutgoingConfirmations())
-	inLongestChain := safe - int64(config.GasUpdaterBlockDelay())
+	inLongestChain := safe - int64(config.BlockHistoryEstimatorBlockDelay())
 
 	// Prepare new rounds logs subscription to be called by new FM job
 	logs := make(chan<- types.Log, 1)
@@ -1402,7 +1402,7 @@ func TestIntegration_MultiwordV1(t *testing.T) {
 	app.Config.Set(orm.EnvVarName("DefaultHTTPAllowUnrestrictedNetworkAccess"), true)
 	confirmed := int64(23456)
 	safe := confirmed + int64(config.MinRequiredOutgoingConfirmations())
-	inLongestChain := safe - int64(config.GasUpdaterBlockDelay())
+	inLongestChain := safe - int64(config.BlockHistoryEstimatorBlockDelay())
 
 	sub.On("Err").Return(nil)
 	sub.On("Unsubscribe").Return(nil).Maybe()

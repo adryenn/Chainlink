@@ -58,8 +58,6 @@ type Config interface {
 	EthTxResendAfterThreshold() time.Duration
 	GasEstimatorMode() string
 	TriggerFallbackDBPollInterval() time.Duration
-	// TODO: Remove this optimism gas fees thing
-	OptimismGasFees() bool
 }
 
 // KeyStore encompasses the subset of keystore used by bulletprooftxmanager

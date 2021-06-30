@@ -144,7 +144,7 @@ func (b *blockHistoryEstimator) EstimateGas(_ []byte, gasLimit uint64) (gasPrice
 }
 
 func (b *blockHistoryEstimator) BumpGas(originalGasPrice *big.Int, gasLimit uint64) (bumpedGasPrice *big.Int, chainSpecificGasLimit uint64, err error) {
-	return bumpGasPriceOnly(b.config, originalGasPrice, gasLimit)
+	return BumpGasPriceOnly(b.config, originalGasPrice, gasLimit)
 }
 
 func (b *blockHistoryEstimator) runLoop() {
