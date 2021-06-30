@@ -13,12 +13,13 @@ import (
 func Test_FixedPriceEstimator(t *testing.T) {
 	t.Parallel()
 
-	t.Run("EstimateGas returns EthGasPriceDefault from config", func(t *testing.T) {
+	// TODO: Add this test for BlockHistoryEstimator also
+	t.Run("EstimateGas returns EthGasPriceDefault from config, with multiplier applied", func(t *testing.T) {
 		config := new(mocks.Config)
 		f := gas.NewFixedPriceEstimator(config)
 
 		config.On("EthGasPriceDefault").Return(big.NewInt(42))
-		config.On("EthGasLimitMultiplier").Return(float32(1.0))
+		config.On("EthGasLimitMultiplier").Return(float32(1.1))
 
 		gasPrice, gasLimit, err := f.EstimateGas(nil, 100000)
 		require.NoError(t, err)

@@ -3,6 +3,7 @@ package bulletprooftxmanager
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"sync"
 	"time"
 
@@ -358,6 +359,9 @@ func (eb *EthBroadcaster) handleInProgressEthTx(etx models.EthTx, attempt models
 		return eb.tryAgainWithHigherGasPrice(sendError, etx, attempt, initialBroadcastAt)
 	}
 
+	if sendError.IsFeeTooLow() {
+	}
+
 	if sendError.IsTemporarilyUnderpriced() {
 		// If we can't even get the transaction into the mempool at all, assume
 		// success (even though the transaction will never confirm) and hand
@@ -462,10 +466,7 @@ func saveAttempt(db *gorm.DB, etx *models.EthTx, attempt models.EthTxAttempt, ne
 	})
 }
 
-func (eb *EthBroadcaster) tryAgainWithHigherGasPrice(sendError *eth.SendError, etx models.EthTx, attempt models.EthTxAttempt, initialBroadcastAt time.Time) error {
-	// bumpedGasPrice, err := BumpGas(eb.config, attempt.GasPrice.ToInt())
-
-	// TODO: Optimism should simply re-query
+func (eb *EthBroadcaster) tryAgainBumpingGas(sendError *eth.SendError, etx models.EthTx, attempt models.EthTxAttempt, initialBroadcastAt time.Time) error {
 	bumpedGasPrice, bumpedGasLimit, err := eb.estimator.BumpGas(attempt.GasPrice.ToInt(), etx.GasLimit)
 	if err != nil {
 		return errors.Wrap(err, "tryAgainWithHigherGasPrice failed")
@@ -477,7 +478,21 @@ func (eb *EthBroadcaster) tryAgainWithHigherGasPrice(sendError *eth.SendError, e
 	if bumpedGasPrice.Cmp(attempt.GasPrice.ToInt()) == 0 && bumpedGasPrice.Cmp(eb.config.EthMaxGasPriceWei()) == 0 {
 		return errors.Errorf("Hit gas price bump ceiling, will not bump further. This is a terminal error")
 	}
-	replacementAttempt, err := newAttempt(eb.ethClient, eb.keystore, eb.config.ChainID(), etx, bumpedGasPrice, bumpedGasLimit)
+	return eb.tryAgainWithNewGas(etx, attempt, initialBroadcastAt, bumpedGasPrice, bumpedGasLimit)
+}
+
+func (eb *EthBroadcaster) tryAgainWithNewEstimation(sendError *eth.SendError, etx models.EthTx, attempt models.EthTxAttempt, initialBroadcastAt time.Time) error {
+	// TODO: Force re-check somehow
+	gasPrice, gasLimit, err := eb.estimator.EstimateGas(etx.EncodedPayload, etx.GasLimit)
+	if err != nil {
+		return errors.Wrap(err, "tryAgainWithNewEstimation failed to estimate gas")
+	}
+	logger.Debugw("Optimism rejected transaction with lower fee")
+	return eb.tryAgainWithNewGas(etx, attempt, initialBroadcastAt, gasPrice, gasLimit)
+}
+
+func (eb *EthBroadcaster) tryAgainWithNewGas(etx models.EthTx, attempt models.EthTxAttempt, initialBroadcastAt time.Time, newGasPrice *big.Int, newGasLimit uint64) error {
+	replacementAttempt, err := newAttempt(eb.ethClient, eb.keystore, eb.config.ChainID(), etx, newGasPrice, newGasLimit)
 	if err != nil {
 		return errors.Wrap(err, "tryAgainWithHigherGasPrice failed")
 	}
