@@ -147,7 +147,7 @@ func (c *Config) Validate() error {
 		return errors.New("ETH_HEAD_TRACKER_HISTORY_DEPTH must be equal to or greater than ETH_FINALITY_DEPTH")
 	}
 
-	if c.GasUpdaterEnabled() && c.GasUpdaterBlockHistorySize() <= 0 {
+	if c.BlockHistoryEstimatorEnabled() && c.BlockHistoryEstimatorBlockHistorySize() <= 0 {
 		return errors.New("GAS_UPDATER_BLOCK_HISTORY_SIZE must be greater than or equal to 1 if gas updater is enabled")
 	}
 
@@ -816,13 +816,13 @@ func (c Config) FlagsContractAddress() string {
 	return c.viper.GetString(EnvVarName("FlagsContractAddress"))
 }
 
-// GasUpdaterBatchSize sets the maximum number of blocks to fetch in one batch in the gas updater
+// BlockHistoryEstimatorBatchSizesets the maximum number of blocks to fetch in one batch in the gas updater
 // If the env var GAS_UPDATER_BATCH_SIZE is set to 0, it defaults to ETH_RPC_DEFAULT_BATCH_SIZE
-func (c Config) GasUpdaterBatchSize() (size uint32) {
-	if c.viper.IsSet(EnvVarName("GasUpdaterBatchSize")) {
-		size = c.viper.GetUint32(EnvVarName("GasUpdaterBatchSize"))
+func (c Config) BlockHistoryEstimatorBatchSize() (size uint32) {
+	if c.viper.IsSet(EnvVarName("BlockHistoryEstimatorBatchSize")) {
+		size = c.viper.GetUint32(EnvVarName("BlockHistoryEstimatorBatchSize"))
 	} else {
-		size = chainSpecificConfig(c).GasUpdaterBatchSize
+		size = chainSpecificConfig(c).BlockHistoryEstimatorBatchSize
 	}
 	if size > 0 {
 		return size
@@ -830,46 +830,57 @@ func (c Config) GasUpdaterBatchSize() (size uint32) {
 	return c.EthRPCDefaultBatchSize()
 }
 
-// GasUpdaterBlockDelay is the number of blocks that the gas updater trails behind head.
+// BlockHistoryEstimatorBlockDelay is the number of blocks that the gas updater trails behind head.
 // E.g. if this is set to 3, and we receive block 10, gas updater will
 // fetch block 7.
 // CAUTION: You might be tempted to set this to 0 to use the latest possible
 // block, but it is possible to receive a head BEFORE that block is actually
 // available from the connected node via RPC. In this case you will get false
 // "zero" blocks that are missing transactions.
-func (c Config) GasUpdaterBlockDelay() uint16 {
-	if c.viper.IsSet(EnvVarName("GasUpdaterBlockDelay")) {
-		return uint16(c.viper.GetUint32(EnvVarName("GasUpdaterBlockDelay")))
+func (c Config) BlockHistoryEstimatorBlockDelay() uint16 {
+	if c.viper.IsSet(EnvVarName("BlockHistoryEstimatorBlockDelay")) {
+		return uint16(c.viper.GetUint32(EnvVarName("BlockHistoryEstimatorBlockDelay")))
 	}
-	return chainSpecificConfig(c).GasUpdaterBlockDelay
+	return chainSpecificConfig(c).BlockHistoryEstimatorBlockDelay
 }
 
-// GasUpdaterBlockHistorySize is the number of past blocks to keep in memory to
+// BlockHistoryEstimatorBlockHistorySize is the number of past blocks to keep in memory to
 // use as a basis for calculating a percentile gas price
-func (c Config) GasUpdaterBlockHistorySize() uint16 {
-	if c.viper.IsSet(EnvVarName("GasUpdaterBlockHistorySize")) {
-		return uint16(c.viper.GetUint32(EnvVarName("GasUpdaterBlockHistorySize")))
+func (c Config) BlockHistoryEstimatorBlockHistorySize() uint16 {
+	if c.viper.IsSet(EnvVarName("BlockHistoryEstimatorBlockHistorySize")) {
+		return uint16(c.viper.GetUint32(EnvVarName("BlockHistoryEstimatorBlockHistorySize")))
 	}
-	return chainSpecificConfig(c).GasUpdaterBlockHistorySize
+	return chainSpecificConfig(c).BlockHistoryEstimatorBlockHistorySize
 }
 
-// GasUpdaterTransactionPercentile is the percentile gas price to choose. E.g.
+// BlockHistoryEstimatorTransactionPercentile is the percentile gas price to choose. E.g.
 // if the past transaction history contains four transactions with gas prices:
 // [100, 200, 300, 400], picking 25 for this number will give a value of 200
-func (c Config) GasUpdaterTransactionPercentile() uint16 {
-	return c.getWithFallback("GasUpdaterTransactionPercentile", parseUint16).(uint16)
+func (c Config) BlockHistoryEstimatorTransactionPercentile() uint16 {
+	return c.getWithFallback("BlockHistoryEstimatorTransactionPercentile", parseUint16).(uint16)
 }
 
-// GasUpdaterEnabled turns on the automatic gas updater if set to true
+// BlockHistoryEstimatorEnabled turns on the automatic gas updater if set to true
 // It is enabled by default on most chains
-func (c Config) GasUpdaterEnabled() bool {
+func (c Config) BlockHistoryEstimatorEnabled() bool {
 	if c.EthereumDisabled() {
 		return false
 	}
-	if c.viper.IsSet(EnvVarName("GasUpdaterEnabled")) {
-		return c.viper.GetBool(EnvVarName("GasUpdaterEnabled"))
+	if c.viper.IsSet(EnvVarName("BlockHistoryEstimatorEnabled")) {
+		return c.viper.GetBool(EnvVarName("BlockHistoryEstimatorEnabled"))
 	}
-	return chainSpecificConfig(c).GasUpdaterEnabled
+	return chainSpecificConfig(c).BlockHistoryEstimatorEnabled
+}
+
+// GasEstimatorMode controls what type of gas estimator is used
+func (c Config) GasEstimatorMode() string {
+	if c.viper.IsSet(EnvVarName("GasEstimatorMode")) {
+		return c.viper.GetString(EnvVarName("GasEstimatorMode"))
+	}
+	if c.BlockHistoryEstimatorEnabled() {
+		return "BlockHistory"
+	}
+	return "FixedPrice"
 }
 
 // InsecureFastScrypt causes all key stores to encrypt using "fast" scrypt params instead

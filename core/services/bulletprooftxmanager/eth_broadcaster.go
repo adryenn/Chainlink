@@ -8,8 +8,10 @@ import (
 
 	"github.com/smartcontractkit/chainlink/core/logger"
 	"github.com/smartcontractkit/chainlink/core/services/eth"
+	"github.com/smartcontractkit/chainlink/core/services/gas"
 	"github.com/smartcontractkit/chainlink/core/services/keystore/keys/ethkey"
 	"github.com/smartcontractkit/chainlink/core/services/postgres"
+	"github.com/smartcontractkit/chainlink/core/static"
 	"github.com/smartcontractkit/chainlink/core/store/models"
 	"github.com/smartcontractkit/chainlink/core/utils"
 
@@ -42,6 +44,7 @@ type EthBroadcaster struct {
 	config         Config
 	keystore       KeyStore
 	advisoryLocker postgres.AdvisoryLocker
+	estimator      gas.Estimator
 
 	ethTxInsertListener postgres.Subscription
 	eventBroadcaster    postgres.EventBroadcaster
@@ -61,7 +64,7 @@ type EthBroadcaster struct {
 }
 
 // NewEthBroadcaster returns a new concrete EthBroadcaster
-func NewEthBroadcaster(db *gorm.DB, ethClient eth.Client, config Config, keystore KeyStore, advisoryLocker postgres.AdvisoryLocker, eventBroadcaster postgres.EventBroadcaster, allKeys []ethkey.Key) *EthBroadcaster {
+func NewEthBroadcaster(db *gorm.DB, ethClient eth.Client, config Config, keystore KeyStore, advisoryLocker postgres.AdvisoryLocker, eventBroadcaster postgres.EventBroadcaster, allKeys []ethkey.Key, estimator gas.Estimator) *EthBroadcaster {
 	ctx, cancel := context.WithCancel(context.Background())
 	triggers := make(map[gethCommon.Address]chan struct{})
 	return &EthBroadcaster{
@@ -70,6 +73,7 @@ func NewEthBroadcaster(db *gorm.DB, ethClient eth.Client, config Config, keystor
 		config:           config,
 		keystore:         keystore,
 		advisoryLocker:   advisoryLocker,
+		estimator:        estimator,
 		eventBroadcaster: eventBroadcaster,
 		keys:             allKeys,
 		triggers:         triggers,
@@ -217,7 +221,7 @@ func (eb *EthBroadcaster) processUnstartedEthTxs(fromAddress gethCommon.Address)
 				return errors.Wrap(err, "CountUnconfirmedTransactions failed")
 			}
 			if nUnconfirmed >= maxInFlightTransactions {
-				logger.Warnw(fmt.Sprintf(`EthBroadcaster: transaction throttling; maximum number of in-flight transactions is %d per key. If this happens a lot, you might need to increase ETH_MAX_IN_FLIGHT_TRANSACTIONS. %s`, maxInFlightTransactions, EthMaxInFlightTransactionsWarningLabel), "nUnconfirmed", nUnconfirmed)
+				logger.Warnw(fmt.Sprintf(`EthBroadcaster: transaction throttling; maximum number of in-flight transactions is %d per key. If this happens a lot, you might need to increase ETH_MAX_IN_FLIGHT_TRANSACTIONS. %s`, maxInFlightTransactions, static.EthMaxInFlightTransactionsWarningLabel), "nUnconfirmed", nUnconfirmed)
 				time.Sleep(InFlightTransactionRecheckInterval)
 				continue
 			}
@@ -230,7 +234,11 @@ func (eb *EthBroadcaster) processUnstartedEthTxs(fromAddress gethCommon.Address)
 			return nil
 		}
 		n++
-		a, err := newAttempt(context.TODO(), eb.ethClient, eb.keystore, eb.config, *etx, nil)
+		gasPrice, gasLimit, err := eb.estimator.EstimateGas(etx.EncodedPayload, etx.GasLimit)
+		if err != nil {
+			return errors.Wrap(err, "failed to estimate gas")
+		}
+		a, err := newAttempt(eb.ethClient, eb.keystore, eb.config.ChainID(), *etx, gasPrice, gasLimit)
 		if err != nil {
 			return errors.Wrap(err, "processUnstartedEthTxs failed")
 		}
@@ -455,7 +463,10 @@ func saveAttempt(db *gorm.DB, etx *models.EthTx, attempt models.EthTxAttempt, ne
 }
 
 func (eb *EthBroadcaster) tryAgainWithHigherGasPrice(sendError *eth.SendError, etx models.EthTx, attempt models.EthTxAttempt, initialBroadcastAt time.Time) error {
-	bumpedGasPrice, err := BumpGas(eb.config, attempt.GasPrice.ToInt())
+	// bumpedGasPrice, err := BumpGas(eb.config, attempt.GasPrice.ToInt())
+
+	// TODO: Optimism should simply re-query
+	bumpedGasPrice, bumpedGasLimit, err := eb.estimator.BumpGas(attempt.GasPrice.ToInt(), etx.GasLimit)
 	if err != nil {
 		return errors.Wrap(err, "tryAgainWithHigherGasPrice failed")
 	}
@@ -466,17 +477,12 @@ func (eb *EthBroadcaster) tryAgainWithHigherGasPrice(sendError *eth.SendError, e
 	if bumpedGasPrice.Cmp(attempt.GasPrice.ToInt()) == 0 && bumpedGasPrice.Cmp(eb.config.EthMaxGasPriceWei()) == 0 {
 		return errors.Errorf("Hit gas price bump ceiling, will not bump further. This is a terminal error")
 	}
-	ctx, cancel := eth.DefaultQueryCtx()
-	defer cancel()
-
-	replacementAttempt, err := newAttempt(ctx, eb.ethClient, eb.keystore, eb.config, etx, bumpedGasPrice)
-	if ctx.Err() != nil {
-		return errors.Wrap(ctx.Err(), "tryAgainWithHigherGasPrice failed, context deadline exceeded")
-	} else if err != nil {
+	replacementAttempt, err := newAttempt(eb.ethClient, eb.keystore, eb.config.ChainID(), etx, bumpedGasPrice, bumpedGasLimit)
+	if err != nil {
 		return errors.Wrap(err, "tryAgainWithHigherGasPrice failed")
 	}
 
-	if err := saveReplacementInProgressAttempt(eb.db, attempt, &replacementAttempt); err != nil {
+	if err = saveReplacementInProgressAttempt(eb.db, attempt, &replacementAttempt); err != nil {
 		return errors.Wrap(err, "tryAgainWithHigherGasPrice failed")
 	}
 	return eb.handleInProgressEthTx(etx, replacementAttempt, initialBroadcastAt)

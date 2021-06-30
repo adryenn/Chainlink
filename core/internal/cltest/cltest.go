@@ -24,7 +24,7 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 
-	"github.com/smartcontractkit/chainlink/core/services/gasupdater"
+	"github.com/smartcontractkit/chainlink/core/services/gas"
 	httypes "github.com/smartcontractkit/chainlink/core/services/headtracker/types"
 	"github.com/smartcontractkit/chainlink/core/services/job"
 	"github.com/smartcontractkit/chainlink/core/services/keystore"
@@ -1514,10 +1514,10 @@ func Head(val interface{}) *models.Head {
 }
 
 // TransactionsFromGasPrices returns transactions matching the given gas prices
-func TransactionsFromGasPrices(gasPrices ...int64) []gasupdater.Transaction {
-	txs := make([]gasupdater.Transaction, len(gasPrices))
+func TransactionsFromGasPrices(gasPrices ...int64) []gas.Transaction {
+	txs := make([]gas.Transaction, len(gasPrices))
 	for i, gasPrice := range gasPrices {
-		txs[i] = gasupdater.Transaction{GasPrice: big.NewInt(gasPrice), GasLimit: 42}
+		txs[i] = gas.Transaction{GasPrice: big.NewInt(gasPrice), GasLimit: 42}
 	}
 	return txs
 }

@@ -1,4 +1,4 @@
-package gasupdater
+package gas
 
 func GasUpdaterToStruct(gu GasUpdater) *gasUpdater {
 	return gu.(*gasUpdater)
