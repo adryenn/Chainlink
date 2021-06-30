@@ -11,6 +11,9 @@ type (
 
 	// ChainSpecificConfig lists the config defaults specific to a particular chain ID
 	ChainSpecificConfig struct {
+		BlockHistoryEstimatorBatchSize        uint32
+		BlockHistoryEstimatorBlockDelay       uint16
+		BlockHistoryEstimatorBlockHistorySize uint16
 		EnableLegacyJobPipeline               bool
 		EthBalanceMonitorBlockDelay           uint16
 		EthFinalityDepth                      uint
@@ -26,10 +29,7 @@ type (
 		EthMaxQueuedTransactions              uint64
 		EthMinGasPriceWei                     big.Int
 		EthTxResendAfterThreshold             time.Duration
-		BlockHistoryEstimatorBatchSize        uint32
-		BlockHistoryEstimatorBlockDelay       uint16
-		BlockHistoryEstimatorBlockHistorySize uint16
-		BlockHistoryEstimatorEnabled          bool
+		GasEstimatorMode                      string
 		LinkContractAddress                   string
 		MinIncomingConfirmations              uint32
 		MinRequiredOutgoingConfirmations      uint64
@@ -56,7 +56,9 @@ func setConfigs() {
 	// See: https://app.clubhouse.io/chainlinklabs/story/11091/chain-configs-should-move-to-toml-json-files
 
 	FallbackConfig = ChainSpecificConfig{
-		set:                                   true,
+		BlockHistoryEstimatorBatchSize:        4, // FIXME: Workaround `websocket: read limit exceeded` until https://app.clubhouse.io/chainlinklabs/story/6717/geth-websockets-can-sometimes-go-bad-under-heavy-load-proposal-for-eth-node-balancer
+		BlockHistoryEstimatorBlockDelay:       1,
+		BlockHistoryEstimatorBlockHistorySize: 24,
 		EnableLegacyJobPipeline:               false,
 		EthBalanceMonitorBlockDelay:           1,
 		EthFinalityDepth:                      50,
@@ -72,15 +74,13 @@ func setConfigs() {
 		EthMaxQueuedTransactions:              250,
 		EthMinGasPriceWei:                     *big.NewInt(1000000000), // 1 Gwei
 		EthTxResendAfterThreshold:             1 * time.Minute,
-		BlockHistoryEstimatorBatchSize:        4, // FIXME: Workaround `websocket: read limit exceeded` until https://app.clubhouse.io/chainlinklabs/story/6717/geth-websockets-can-sometimes-go-bad-under-heavy-load-proposal-for-eth-node-balancer
-		BlockHistoryEstimatorBlockDelay:       1,
-		BlockHistoryEstimatorBlockHistorySize: 24,
-		BlockHistoryEstimatorEnabled:          true,
+		GasEstimatorMode:                      "BlockHistory",
 		LinkContractAddress:                   "",
 		MinIncomingConfirmations:              3,
 		MinRequiredOutgoingConfirmations:      12,
 		MinimumContractPayment:                assets.NewLink(100000000000000), // 0.0001 LINK
 		OCRContractConfirmations:              4,
+		set:                                   true,
 	}
 
 	mainnet := FallbackConfig
@@ -129,7 +129,6 @@ func setConfigs() {
 	bscMainnet.EthTxResendAfterThreshold = 1 * time.Minute
 	bscMainnet.BlockHistoryEstimatorBlockDelay = 2
 	bscMainnet.BlockHistoryEstimatorBlockHistorySize = 24
-	bscMainnet.BlockHistoryEstimatorEnabled = true
 	bscMainnet.LinkContractAddress = "0x404460c6a5ede2d891e8297795264fde62adbb75"
 	bscMainnet.MinIncomingConfirmations = 3
 	bscMainnet.MinRequiredOutgoingConfirmations = 12
@@ -153,7 +152,6 @@ func setConfigs() {
 	polygonMainnet.EthTxResendAfterThreshold = 5 * time.Minute    // 5 minutes is roughly 300 blocks on Polygon. Since re-orgs occur often and can be deep we want to avoid overloading the node with a ton of re-sent unconfirmed transactions.
 	polygonMainnet.BlockHistoryEstimatorBlockDelay = 10
 	polygonMainnet.BlockHistoryEstimatorBlockHistorySize = 24
-	polygonMainnet.BlockHistoryEstimatorEnabled = true
 	polygonMainnet.LinkContractAddress = "0xb0897686c545045afc77cf20ec7a532e3120e0f1"
 	polygonMainnet.MinIncomingConfirmations = 5
 	polygonMainnet.MinRequiredOutgoingConfirmations = 12
@@ -168,7 +166,7 @@ func setConfigs() {
 	arbitrumMainnet.EthGasPriceDefault = *big.NewInt(1000000000000) // Arbitrum uses something like a Vickrey auction model where gas price represents a "max bid". In practice we usually pay much less
 	arbitrumMainnet.EthMaxGasPriceWei = *big.NewInt(1000000000000)  // Fix the gas price
 	arbitrumMainnet.EthMinGasPriceWei = *big.NewInt(1000000000000)  // Fix the gas price
-	arbitrumMainnet.BlockHistoryEstimatorEnabled = false
+	arbitrumMainnet.GasEstimatorMode = "FixedPrice"
 	arbitrumMainnet.BlockHistoryEstimatorBlockHistorySize = 0 // Force an error if someone set GAS_UPDATER_ENABLED=true by accident; we never want to run the gas updater on arbitrum
 	arbitrumMainnet.LinkContractAddress = "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4"
 	arbitrumMainnet.OCRContractConfirmations = 1
@@ -184,7 +182,7 @@ func setConfigs() {
 	optimismMainnet.EthHeadTrackerSamplingInterval = 1 * time.Second
 	optimismMainnet.EthTxResendAfterThreshold = 15 * time.Second
 	optimismMainnet.BlockHistoryEstimatorBlockHistorySize = 0 // Force an error if someone set GAS_UPDATER_ENABLED=true by accident; we never want to run the gas updater on optimism
-	optimismMainnet.BlockHistoryEstimatorEnabled = false
+	optimismMainnet.GasEstimatorMode = "Optimism"
 	optimismMainnet.LinkContractAddress = "" // TBD
 	optimismMainnet.MinIncomingConfirmations = 1
 	optimismMainnet.MinRequiredOutgoingConfirmations = 0

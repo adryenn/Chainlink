@@ -147,8 +147,8 @@ func (c *Config) Validate() error {
 		return errors.New("ETH_HEAD_TRACKER_HISTORY_DEPTH must be equal to or greater than ETH_FINALITY_DEPTH")
 	}
 
-	if c.BlockHistoryEstimatorEnabled() && c.BlockHistoryEstimatorBlockHistorySize() <= 0 {
-		return errors.New("GAS_UPDATER_BLOCK_HISTORY_SIZE must be greater than or equal to 1 if gas updater is enabled")
+	if c.GasEstimatorMode() == "BlockHistory" && c.BlockHistoryEstimatorBlockHistorySize() <= 0 {
+		return errors.New("GAS_UPDATER_BLOCK_HISTORY_SIZE must be greater than or equal to 1 if block history estimator is enabled")
 	}
 
 	if c.P2PAnnouncePort() != 0 && c.P2PAnnounceIP() == nil {
@@ -622,7 +622,7 @@ func (c Config) EthGasPriceDefault() *big.Int {
 	return &n
 }
 
-// EthGasLimitMultiplier is a factory by which a transaction's GasLimit is
+// EthGasLimitMultiplier is a factor by which a transaction's GasLimit is
 // multiplied before transmission. So if the value is 1.1, and the GasLimit for
 // a transaction is 10, 10% will be added before transmission.
 //
@@ -860,27 +860,22 @@ func (c Config) BlockHistoryEstimatorTransactionPercentile() uint16 {
 	return c.getWithFallback("BlockHistoryEstimatorTransactionPercentile", parseUint16).(uint16)
 }
 
-// BlockHistoryEstimatorEnabled turns on the automatic gas updater if set to true
-// It is enabled by default on most chains
-func (c Config) BlockHistoryEstimatorEnabled() bool {
-	if c.EthereumDisabled() {
-		return false
-	}
-	if c.viper.IsSet(EnvVarName("BlockHistoryEstimatorEnabled")) {
-		return c.viper.GetBool(EnvVarName("BlockHistoryEstimatorEnabled"))
-	}
-	return chainSpecificConfig(c).BlockHistoryEstimatorEnabled
-}
-
 // GasEstimatorMode controls what type of gas estimator is used
 func (c Config) GasEstimatorMode() string {
+	if c.EthereumDisabled() {
+		return "FixedPrice"
+	}
 	if c.viper.IsSet(EnvVarName("GasEstimatorMode")) {
 		return c.viper.GetString(EnvVarName("GasEstimatorMode"))
 	}
-	if c.BlockHistoryEstimatorEnabled() {
-		return "BlockHistory"
+	if c.viper.IsSet(EnvVarName("BlockHistoryEstimatorEnabled")) {
+		if c.viper.GetBool(EnvVarName("BlockHistoryEstimatorEnabled")) {
+			return "BlockHistory"
+		} else {
+			return "FixedPrice"
+		}
 	}
-	return "FixedPrice"
+	return chainSpecificConfig(c).GasEstimatorMode
 }
 
 // InsecureFastScrypt causes all key stores to encrypt using "fast" scrypt params instead

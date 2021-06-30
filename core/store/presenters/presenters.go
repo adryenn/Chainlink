@@ -41,7 +41,6 @@ type EnvPrinter struct {
 	BlockBackfillDepth                         uint64          `json:"BLOCK_BACKFILL_DEPTH"`
 	BlockHistoryEstimatorBlockDelay            uint16          `json:"GAS_UPDATER_BLOCK_DELAY"`
 	BlockHistoryEstimatorBlockHistorySize      uint16          `json:"GAS_UPDATER_BLOCK_HISTORY_SIZE"`
-	BlockHistoryEstimatorEnabled               bool            `json:"GAS_UPDATER_ENABLED"`
 	BlockHistoryEstimatorTransactionPercentile uint16          `json:"GAS_UPDATER_TRANSACTION_PERCENTILE"`
 	BridgeResponseURL                          string          `json:"BRIDGE_RESPONSE_URL,omitempty"`
 	ChainID                                    *big.Int        `json:"ETH_CHAIN_ID"`
@@ -76,12 +75,12 @@ type EnvPrinter struct {
 	FeatureFluxMonitor                         bool            `json:"FEATURE_FLUX_MONITOR"`
 	FeatureOffchainReporting                   bool            `json:"FEATURE_OFFCHAIN_REPORTING"`
 	FlagsContractAddress                       string          `json:"FLAGS_CONTRACT_ADDRESS"`
+	GasEstimatorMode                           string          `json:"GAS_ESTIMATOR_MODE"`
 	InsecureFastScrypt                         bool            `json:"INSECURE_FAST_SCRYPT"`
-	KeeperDefaultTransactionQueueDepth         uint32          `json:"KEEPER_DEFAULT_TRANSACTION_QUEUE_DEPTH"`
-	TriggerFallbackDBPollInterval              time.Duration   `json:"JOB_PIPELINE_DB_POLL_INTERVAL"`
+	JSONConsole                                bool            `json:"JSON_CONSOLE"`
 	JobPipelineReaperInterval                  time.Duration   `json:"JOB_PIPELINE_REAPER_INTERVAL"`
 	JobPipelineReaperThreshold                 time.Duration   `json:"JOB_PIPELINE_REAPER_THRESHOLD"`
-	JSONConsole                                bool            `json:"JSON_CONSOLE"`
+	KeeperDefaultTransactionQueueDepth         uint32          `json:"KEEPER_DEFAULT_TRANSACTION_QUEUE_DEPTH"`
 	LinkContractAddress                        string          `json:"LINK_CONTRACT_ADDRESS"`
 	LogLevel                                   orm.LogLevel    `json:"LOG_LEVEL"`
 	LogSQLMigrations                           bool            `json:"LOG_SQL_MIGRATIONS"`
@@ -90,10 +89,11 @@ type EnvPrinter struct {
 	MaximumServiceDuration                     models.Duration `json:"MAXIMUM_SERVICE_DURATION"`
 	MinIncomingConfirmations                   uint32          `json:"MIN_INCOMING_CONFIRMATIONS"`
 	MinRequiredOutgoingConfirmations           uint64          `json:"MIN_OUTGOING_CONFIRMATIONS"`
-	MinimumServiceDuration                     models.Duration `json:"MINIMUM_SERVICE_DURATION"`
 	MinimumContractPayment                     *assets.Link    `json:"MINIMUM_CONTRACT_PAYMENT_LINK_JUELS"`
 	MinimumRequestExpiration                   uint64          `json:"MINIMUM_REQUEST_EXPIRATION"`
+	MinimumServiceDuration                     models.Duration `json:"MINIMUM_SERVICE_DURATION"`
 	OCRBootstrapCheckInterval                  time.Duration   `json:"OCR_BOOTSTRAP_CHECK_INTERVAL"`
+	TriggerFallbackDBPollInterval              time.Duration   `json:"JOB_PIPELINE_DB_POLL_INTERVAL"`
 	OCRContractTransmitterTransmitTimeout      time.Duration   `json:"OCR_CONTRACT_TRANSMITTER_TRANSMIT_TIMEOUT"`
 	OCRDatabaseTimeout                         time.Duration   `json:"OCR_DATABASE_TIMEOUT"`
 	P2PListenIP                                string          `json:"P2P_LISTEN_IP"`
@@ -139,7 +139,6 @@ func NewConfigPrinter(store *store.Store) (ConfigPrinter, error) {
 			BlockBackfillDepth:                         config.BlockBackfillDepth(),
 			BlockHistoryEstimatorBlockDelay:            config.BlockHistoryEstimatorBlockDelay(),
 			BlockHistoryEstimatorBlockHistorySize:      config.BlockHistoryEstimatorBlockHistorySize(),
-			BlockHistoryEstimatorEnabled:               config.BlockHistoryEstimatorEnabled(),
 			BlockHistoryEstimatorTransactionPercentile: config.BlockHistoryEstimatorTransactionPercentile(),
 			BridgeResponseURL:                          config.BridgeResponseURL().String(),
 			ChainID:                                    config.ChainID(),
@@ -174,6 +173,7 @@ func NewConfigPrinter(store *store.Store) (ConfigPrinter, error) {
 			FeatureFluxMonitor:                         config.FeatureFluxMonitor(),
 			FeatureOffchainReporting:                   config.FeatureOffchainReporting(),
 			FlagsContractAddress:                       config.FlagsContractAddress(),
+			GasEstimatorMode:                           config.GasEstimatorMode(),
 			InsecureFastScrypt:                         config.InsecureFastScrypt(),
 			JSONConsole:                                config.JSONConsole(),
 			JobPipelineReaperInterval:                  config.JobPipelineReaperInterval(),

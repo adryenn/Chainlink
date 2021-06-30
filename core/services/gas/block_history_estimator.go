@@ -362,14 +362,17 @@ func (b *blockHistoryEstimator) percentileGasPrice(percentile int) (*big.Int, er
 }
 
 func (b *blockHistoryEstimator) setPercentileGasPrice(gasPrice *big.Int) {
+	max := b.config.EthMaxGasPriceWei()
+	min := b.config.EthMinGasPriceWei()
+
 	b.gasPriceMu.Lock()
 	defer b.gasPriceMu.Unlock()
-	if gasPrice.Cmp(b.config.EthMaxGasPriceWei()) > 0 {
-		b.logger.Warnw(fmt.Sprintf("Calculated gas price of %s Wei exceeds ETH_MAX_GAS_PRICE_WEI=%[2]s, setting gas price to the maximum allowed value of %[2]s Wei instead", gasPrice.String(), b.config.EthMaxGasPriceWei().String()), "gasPriceWei", gasPrice, "maxGasPriceWei", b.config.EthMaxGasPriceWei())
-		b.gasPrice = b.config.EthMaxGasPriceWei()
-	} else if gasPrice.Cmp(b.config.EthMinGasPriceWei()) < 0 {
-		b.logger.Warnw(fmt.Sprintf("Calculated gas price of %s Wei falls below ETH_MIN_GAS_PRICE_WEI=%[2]s, setting gas price to the minimum allowed value of %[2]s Wei instead", gasPrice.String(), b.config.EthMaxGasPriceWei().String()), "gasPriceWei", gasPrice, "maxGasPriceWei", b.config.EthMaxGasPriceWei())
-		b.gasPrice = b.config.EthMinGasPriceWei()
+	if gasPrice.Cmp(max) > 0 {
+		b.logger.Warnw(fmt.Sprintf("Calculated gas price of %s Wei exceeds ETH_MAX_GAS_PRICE_WEI=%[2]s, setting gas price to the maximum allowed value of %[2]s Wei instead", gasPrice.String(), max.String()), "gasPriceWei", gasPrice, "maxGasPriceWei", max)
+		b.gasPrice = max
+	} else if gasPrice.Cmp(min) < 0 {
+		b.logger.Warnw(fmt.Sprintf("Calculated gas price of %s Wei falls below ETH_MIN_GAS_PRICE_WEI=%[2]s, setting gas price to the minimum allowed value of %[2]s Wei instead", gasPrice.String(), min.String()), "gasPriceWei", gasPrice, "maxGasPriceWei", min)
+		b.gasPrice = min
 	} else {
 		b.gasPrice = gasPrice
 	}

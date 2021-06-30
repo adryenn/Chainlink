@@ -18,16 +18,9 @@ func NewFixedPriceEstimator(config Config) Estimator {
 	return &fixedPriceEstimator{config}
 }
 
-func (f *fixedPriceEstimator) Start() error {
-	return nil
-}
-func (f *fixedPriceEstimator) Close() error {
-	return nil
-}
-
-func (f *fixedPriceEstimator) OnNewLongestChain(_ context.Context, _ models.Head) {
-	panic("not implemented") // TODO: Implement
-}
+func (f *fixedPriceEstimator) Start() error                                       { return nil }
+func (f *fixedPriceEstimator) Close() error                                       { return nil }
+func (f *fixedPriceEstimator) OnNewLongestChain(_ context.Context, _ models.Head) { return }
 
 func (f *fixedPriceEstimator) EstimateGas(_ []byte, gasLimit uint64) (gasPrice *big.Int, chainSpecificGasLimit uint64, err error) {
 	gasPrice = f.config.EthGasPriceDefault()
@@ -35,7 +28,6 @@ func (f *fixedPriceEstimator) EstimateGas(_ []byte, gasLimit uint64) (gasPrice *
 	return
 }
 
-// , "ethGasPriceDefault", store.Config.EthGasPriceDefault())
 func (f *fixedPriceEstimator) BumpGas(originalGasPrice *big.Int, originalGasLimit uint64) (gasPrice *big.Int, gasLimit uint64, err error) {
 	return bumpGasPriceOnly(f.config, originalGasPrice, originalGasLimit)
 }
