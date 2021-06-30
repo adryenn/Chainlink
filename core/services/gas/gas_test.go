@@ -74,8 +74,9 @@ func Test_BumpGasPriceOnly(t *testing.T) {
 			config.Set("ETH_GAS_BUMP_PERCENT", test.bumpPercent)
 			config.Set("ETH_GAS_BUMP_WEI", test.bumpWei)
 			config.Set("ETH_MAX_GAS_PRICE_WEI", test.maxGasPriceWei)
-			actual, err := gas.BumpGasPriceOnly(config, test.originalGasPrice)
+			actual, limit, err := gas.BumpGasPriceOnly(config, test.originalGasPrice, 42)
 			require.NoError(t, err)
+			require.Equal(t, uint64(42), limit)
 			if actual.Cmp(test.expected) != 0 {
 				t.Fatalf("Expected %s but got %s", test.expected.String(), actual.String())
 			}
@@ -92,7 +93,7 @@ func Test_BumpGasPriceOnly_HitsMaxError(t *testing.T) {
 	config.Set("ETH_MAX_GAS_PRICE_WEI", toBigInt("4e10")) // 40 Gwei
 
 	originalGasPrice := toBigInt("3e10") // 30 GWei
-	_, err := gas.BumpGasPriceOnly(config, originalGasPrice)
+	_, _, err := gas.BumpGasPriceOnly(config, originalGasPrice, 42)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "bumped gas price of 45000000000 would exceed configured max gas price of 40000000000 (original price was 30000000000)")
 }
@@ -105,13 +106,13 @@ func Test_BumpGasPriceOnly_NoBumpError(t *testing.T) {
 	config.Set("ETH_MAX_GAS_PRICE_WEI", "40000000000")
 
 	originalGasPrice := toBigInt("3e10") // 30 GWei
-	_, err := gas.BumpGasPriceOnly(config, originalGasPrice)
+	_, _, err := gas.BumpGasPriceOnly(config, originalGasPrice, 42)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "bumped gas price of 30000000000 is equal to original gas price of 30000000000. ACTION REQUIRED: This is a configuration error, you must increase either ETH_GAS_BUMP_PERCENT or ETH_GAS_BUMP_WEI")
 
 	// Even if it's exactly the maximum
 	originalGasPrice = toBigInt("4e10") // 40 GWei
-	_, err = gas.BumpGasPriceOnly(config, originalGasPrice)
+	_, _, err = gas.BumpGasPriceOnly(config, originalGasPrice, 42)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "bumped gas price of 40000000000 is equal to original gas price of 40000000000. ACTION REQUIRED: This is a configuration error, you must increase either ETH_GAS_BUMP_PERCENT or ETH_GAS_BUMP_WEI")
 }

@@ -1,8 +1,17 @@
 package gas
 
-func GasUpdaterToStruct(gu GasUpdater) *gasUpdater {
-	return gu.(*gasUpdater)
+import "math/big"
+
+func BlockHistoryEstimatorFromInterface(bhe Estimator) *BlockHistoryEstimator {
+	return bhe.(*BlockHistoryEstimator)
 }
-func SetRollingBlockHistory(gu GasUpdater, blocks []Block) {
-	gu.(*gasUpdater).rollingBlockHistory = blocks
+
+func SetRollingBlockHistory(bhe Estimator, blocks []Block) {
+	bhe.(*BlockHistoryEstimator).rollingBlockHistory = blocks
+}
+
+func GetGasPrice(b *BlockHistoryEstimator) *big.Int {
+	b.gasPriceMu.Lock()
+	defer b.gasPriceMu.Unlock()
+	return b.gasPrice
 }

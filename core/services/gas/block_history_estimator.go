@@ -46,11 +46,11 @@ var (
 	)
 )
 
-var _ Estimator = &blockHistoryEstimator{}
+var _ Estimator = &BlockHistoryEstimator{}
 
 //go:generate mockery --name Config --output ./mocks/ --case=underscore
 type (
-	blockHistoryEstimator struct {
+	BlockHistoryEstimator struct {
 		utils.StartStopOnce
 		ethClient           eth.Client
 		config              Config
@@ -67,12 +67,12 @@ type (
 	}
 )
 
-// NewBlockHistoryEstimator returns a new blockHistoryEstimator that listens
+// NewBlockHistoryEstimator returns a new BlockHistoryEstimator that listens
 // for new heads and updates the base gas price dynamically based on the
 // confibred percentile of gas prices in that block
 func NewBlockHistoryEstimator(ethClient eth.Client, config Config) Estimator {
 	ctx, cancel := context.WithCancel(context.Background())
-	b := &blockHistoryEstimator{
+	b := &BlockHistoryEstimator{
 		utils.StartStopOnce{},
 		ethClient,
 		config,
@@ -89,17 +89,17 @@ func NewBlockHistoryEstimator(ethClient eth.Client, config Config) Estimator {
 	return b
 }
 
-func (b *blockHistoryEstimator) Connect(bn *models.Head) error {
+func (b *BlockHistoryEstimator) Connect(bn *models.Head) error {
 	return nil
 }
 
 // OnNewLongestChain recalculates and sets global gas price if a sampled new head comes
 // in and we are not currently fetching
-func (b *blockHistoryEstimator) OnNewLongestChain(ctx context.Context, head models.Head) {
+func (b *BlockHistoryEstimator) OnNewLongestChain(ctx context.Context, head models.Head) {
 	b.mb.Deliver(head)
 }
 
-func (b *blockHistoryEstimator) Start() error {
+func (b *BlockHistoryEstimator) Start() error {
 	return b.StartOnce("BlockHistoryEstimator", func() error {
 		b.logger.Debugw("BlockHistoryEstimator: starting")
 		if uint(b.config.BlockHistoryEstimatorBlockHistorySize()) > b.config.EthFinalityDepth() {
@@ -122,7 +122,7 @@ func (b *blockHistoryEstimator) Start() error {
 	})
 }
 
-func (b *blockHistoryEstimator) Close() error {
+func (b *BlockHistoryEstimator) Close() error {
 	return b.StopOnce("BlockHistoryEstimator", func() error {
 		b.ctxCancel()
 		b.wg.Wait()
@@ -130,7 +130,7 @@ func (b *blockHistoryEstimator) Close() error {
 	})
 }
 
-func (b *blockHistoryEstimator) EstimateGas(_ []byte, gasLimit uint64) (gasPrice *big.Int, chainSpecificGasLimit uint64, err error) {
+func (b *BlockHistoryEstimator) EstimateGas(_ []byte, gasLimit uint64) (gasPrice *big.Int, chainSpecificGasLimit uint64, err error) {
 	ok := b.IfStarted(func() {
 		chainSpecificGasLimit = applyMultiplier(gasLimit, b.config.EthGasLimitMultiplier())
 		b.gasPriceMu.RLock()
@@ -143,11 +143,11 @@ func (b *blockHistoryEstimator) EstimateGas(_ []byte, gasLimit uint64) (gasPrice
 	return
 }
 
-func (b *blockHistoryEstimator) BumpGas(originalGasPrice *big.Int, gasLimit uint64) (bumpedGasPrice *big.Int, chainSpecificGasLimit uint64, err error) {
+func (b *BlockHistoryEstimator) BumpGas(originalGasPrice *big.Int, gasLimit uint64) (bumpedGasPrice *big.Int, chainSpecificGasLimit uint64, err error) {
 	return BumpGasPriceOnly(b.config, originalGasPrice, gasLimit)
 }
 
-func (b *blockHistoryEstimator) runLoop() {
+func (b *BlockHistoryEstimator) runLoop() {
 	defer b.wg.Done()
 	for {
 		select {
@@ -168,7 +168,7 @@ func (b *blockHistoryEstimator) runLoop() {
 	}
 }
 
-func (b *blockHistoryEstimator) FetchBlocksAndRecalculate(ctx context.Context, head models.Head) {
+func (b *BlockHistoryEstimator) FetchBlocksAndRecalculate(ctx context.Context, head models.Head) {
 	ctx, cancel := context.WithTimeout(ctx, maxEthNodeRequestTime)
 	defer cancel()
 
@@ -181,7 +181,7 @@ func (b *blockHistoryEstimator) FetchBlocksAndRecalculate(ctx context.Context, h
 }
 
 // FetchHeadsAndRecalculate adds the given heads to the history and recalculates gas price
-func (b *blockHistoryEstimator) Recalculate(head models.Head) {
+func (b *BlockHistoryEstimator) Recalculate(head models.Head) {
 	percentile := int(b.config.BlockHistoryEstimatorTransactionPercentile())
 
 	if len(b.rollingBlockHistory) == 0 {
@@ -217,7 +217,7 @@ func (b *blockHistoryEstimator) Recalculate(head models.Head) {
 	promBlockHistoryEstimatorSetGasPrice.WithLabelValues(fmt.Sprintf("%v%%", percentile)).Set(float64(percentileGasPrice.Int64()))
 }
 
-func (b *blockHistoryEstimator) FetchBlocks(ctx context.Context, head models.Head) error {
+func (b *BlockHistoryEstimator) FetchBlocks(ctx context.Context, head models.Head) error {
 	// HACK: blockDelay is the number of blocks that the gas updater trails behind head.
 	// E.g. if this is set to 3, and we receive block 10, gas updater will
 	// fetch block 7.
@@ -312,7 +312,7 @@ func (b *blockHistoryEstimator) FetchBlocks(ctx context.Context, head models.Hea
 	return nil
 }
 
-func (b *blockHistoryEstimator) batchFetch(ctx context.Context, reqs []rpc.BatchElem) error {
+func (b *BlockHistoryEstimator) batchFetch(ctx context.Context, reqs []rpc.BatchElem) error {
 	batchSize := int(b.config.BlockHistoryEstimatorBatchSize())
 
 	if batchSize == 0 {
@@ -338,7 +338,7 @@ var (
 	ErrNoSuitableTransactions = errors.New("no suitable transactions")
 )
 
-func (b *blockHistoryEstimator) percentileGasPrice(percentile int) (*big.Int, error) {
+func (b *BlockHistoryEstimator) percentileGasPrice(percentile int) (*big.Int, error) {
 	minGasPriceWei := b.config.EthMinGasPriceWei()
 	chainID := b.config.ChainID()
 	gasPrices := make([]*big.Int, 0)
@@ -361,7 +361,7 @@ func (b *blockHistoryEstimator) percentileGasPrice(percentile int) (*big.Int, er
 	return gasPrices[idx], nil
 }
 
-func (b *blockHistoryEstimator) setPercentileGasPrice(gasPrice *big.Int) {
+func (b *BlockHistoryEstimator) setPercentileGasPrice(gasPrice *big.Int) {
 	max := b.config.EthMaxGasPriceWei()
 	min := b.config.EthMinGasPriceWei()
 
@@ -378,7 +378,7 @@ func (b *blockHistoryEstimator) setPercentileGasPrice(gasPrice *big.Int) {
 	}
 }
 
-func (b *blockHistoryEstimator) RollingBlockHistory() []Block {
+func (b *BlockHistoryEstimator) RollingBlockHistory() []Block {
 	return b.rollingBlockHistory
 }
 

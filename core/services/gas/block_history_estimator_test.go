@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGasUpdater_Start(t *testing.T) {
+func TestBlockHistoryEstimator_Start(t *testing.T) {
 	t.Parallel()
 
 	config := new(gumocks.Config)
@@ -34,19 +34,19 @@ func TestGasUpdater_Start(t *testing.T) {
 	var percentile uint16 = 35
 	minGasPrice := big.NewInt(1)
 
-	config.On("GasUpdaterBatchSize").Return(batchSize)
-	config.On("GasUpdaterBlockDelay").Return(blockDelay)
-	config.On("GasUpdaterBlockHistorySize").Return(historySize)
+	config.On("BlockHistoryEstimatorBatchSize").Return(batchSize)
+	config.On("BlockHistoryEstimatorBlockDelay").Return(blockDelay)
+	config.On("BlockHistoryEstimatorBlockHistorySize").Return(historySize)
 	config.On("EthFinalityDepth").Return(ethFinalityDepth)
-	config.On("GasUpdaterTransactionPercentile").Return(percentile)
+	config.On("BlockHistoryEstimatorTransactionPercentile").Return(percentile)
 	config.On("EthMinGasPriceWei").Return(minGasPrice)
 	config.On("ChainID").Return(big.NewInt(0))
 
 	t.Run("loads initial state", func(t *testing.T) {
 		ethClient := new(mocks.Client)
 
-		guIface := gas.NewGasUpdater(ethClient, config)
-		gu := gas.GasUpdaterToStruct(guIface)
+		estimator := gas.NewBlockHistoryEstimator(ethClient, config)
+		bhe := gas.BlockHistoryEstimatorFromInterface(estimator)
 
 		h := &models.Head{Hash: cltest.NewHash(), Number: 42}
 		ethClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).Return(h, nil)
@@ -66,12 +66,12 @@ func TestGasUpdater_Start(t *testing.T) {
 			}
 		})
 
-		err := guIface.Start()
+		err := estimator.Start()
 		require.NoError(t, err)
 
-		assert.Len(t, gu.RollingBlockHistory(), 2)
-		assert.Equal(t, int(gu.RollingBlockHistory()[0].Number), 41)
-		assert.Equal(t, int(gu.RollingBlockHistory()[1].Number), 42)
+		assert.Len(t, bhe.RollingBlockHistory(), 2)
+		assert.Equal(t, int(bhe.RollingBlockHistory()[0].Number), 41)
+		assert.Equal(t, int(bhe.RollingBlockHistory()[1].Number), 42)
 
 		ethClient.AssertExpectations(t)
 		config.AssertExpectations(t)
@@ -80,7 +80,7 @@ func TestGasUpdater_Start(t *testing.T) {
 	t.Run("boots even if initial batch call returns nothing", func(t *testing.T) {
 		ethClient := new(mocks.Client)
 
-		gu := gas.NewGasUpdater(ethClient, config)
+		bhe := gas.NewBlockHistoryEstimator(ethClient, config)
 
 		h := &models.Head{Hash: cltest.NewHash(), Number: 42}
 		ethClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).Return(h, nil)
@@ -88,7 +88,7 @@ func TestGasUpdater_Start(t *testing.T) {
 			return len(b) == int(historySize)
 		})).Return(nil)
 
-		err := gu.Start()
+		err := bhe.Start()
 		require.NoError(t, err)
 
 		ethClient.AssertExpectations(t)
@@ -98,11 +98,11 @@ func TestGasUpdater_Start(t *testing.T) {
 	t.Run("starts anyway if fetching latest head fails", func(t *testing.T) {
 		ethClient := new(mocks.Client)
 
-		gu := gas.NewGasUpdater(ethClient, config)
+		bhe := gas.NewBlockHistoryEstimator(ethClient, config)
 
 		ethClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).Return(nil, errors.New("something exploded"))
 
-		err := gu.Start()
+		err := bhe.Start()
 		require.NoError(t, err)
 
 		ethClient.AssertExpectations(t)
@@ -110,41 +110,41 @@ func TestGasUpdater_Start(t *testing.T) {
 	})
 }
 
-func TestGasUpdater_FetchBlocks(t *testing.T) {
+func TestBlockHistoryEstimator_FetchBlocks(t *testing.T) {
 	t.Parallel()
 
 	t.Run("with history size of 0, errors", func(t *testing.T) {
 		ethClient := new(mocks.Client)
 		config := new(gumocks.Config)
-		gu := gas.GasUpdaterToStruct(gas.NewGasUpdater(ethClient, config))
+		bhe := gas.BlockHistoryEstimatorFromInterface(gas.NewBlockHistoryEstimator(ethClient, config))
 
 		var blockDelay uint16 = 3
 		var historySize uint16 = 0
 		config.On("ChainID").Return(big.NewInt(0))
-		config.On("GasUpdaterBlockDelay").Return(blockDelay)
-		config.On("GasUpdaterBlockHistorySize").Return(historySize)
+		config.On("BlockHistoryEstimatorBlockDelay").Return(blockDelay)
+		config.On("BlockHistoryEstimatorBlockHistorySize").Return(historySize)
 
 		head := cltest.Head(42)
-		err := gu.FetchBlocks(context.Background(), *head)
+		err := bhe.FetchBlocks(context.Background(), *head)
 		require.Error(t, err)
-		require.EqualError(t, err, "GasUpdater: history size must be > 0, got: 0")
+		require.EqualError(t, err, "BlockHistoryEstimator: history size must be > 0, got: 0")
 	})
 
 	t.Run("with current block height less than block delay does nothing", func(t *testing.T) {
 		ethClient := new(mocks.Client)
 		config := new(gumocks.Config)
-		gu := gas.GasUpdaterToStruct(gas.NewGasUpdater(ethClient, config))
+		bhe := gas.BlockHistoryEstimatorFromInterface(gas.NewBlockHistoryEstimator(ethClient, config))
 
 		var blockDelay uint16 = 3
 		var historySize uint16 = 1
-		config.On("GasUpdaterBlockDelay").Return(blockDelay)
-		config.On("GasUpdaterBlockHistorySize").Return(historySize)
+		config.On("BlockHistoryEstimatorBlockDelay").Return(blockDelay)
+		config.On("BlockHistoryEstimatorBlockHistorySize").Return(historySize)
 
 		for i := -1; i < 3; i++ {
 			head := cltest.Head(i)
-			err := gu.FetchBlocks(context.Background(), *head)
+			err := bhe.FetchBlocks(context.Background(), *head)
 			require.Error(t, err)
-			require.EqualError(t, err, fmt.Sprintf("GasUpdater: cannot fetch, current block height %v is lower than GAS_UPDATER_BLOCK_DELAY=3", i))
+			require.EqualError(t, err, fmt.Sprintf("BlockHistoryEstimator: cannot fetch, current block height %v is lower than GAS_UPDATER_BLOCK_DELAY=3", i))
 		}
 
 		ethClient.AssertExpectations(t)
@@ -154,20 +154,20 @@ func TestGasUpdater_FetchBlocks(t *testing.T) {
 	t.Run("with error retrieving blocks returns error", func(t *testing.T) {
 		ethClient := new(mocks.Client)
 		config := new(gumocks.Config)
-		gu := gas.GasUpdaterToStruct(gas.NewGasUpdater(ethClient, config))
+		bhe := gas.BlockHistoryEstimatorFromInterface(gas.NewBlockHistoryEstimator(ethClient, config))
 
 		var blockDelay uint16 = 3
 		var historySize uint16 = 3
 		var batchSize uint32 = 0
-		config.On("GasUpdaterBlockDelay").Return(blockDelay)
-		config.On("GasUpdaterBlockHistorySize").Return(historySize)
-		config.On("GasUpdaterBatchSize").Return(batchSize)
+		config.On("BlockHistoryEstimatorBlockDelay").Return(blockDelay)
+		config.On("BlockHistoryEstimatorBlockHistorySize").Return(historySize)
+		config.On("BlockHistoryEstimatorBatchSize").Return(batchSize)
 
 		ethClient.On("BatchCallContext", mock.Anything, mock.Anything).Return(errors.New("something exploded"))
 
-		err := gu.FetchBlocks(context.Background(), *cltest.Head(42))
+		err := bhe.FetchBlocks(context.Background(), *cltest.Head(42))
 		require.Error(t, err)
-		assert.EqualError(t, err, "GasUpdater#fetchBlocks error fetching blocks with BatchCallContext: something exploded")
+		assert.EqualError(t, err, "BlockHistoryEstimator#fetchBlocks error fetching blocks with BatchCallContext: something exploded")
 
 		ethClient.AssertExpectations(t)
 		config.AssertExpectations(t)
@@ -176,15 +176,15 @@ func TestGasUpdater_FetchBlocks(t *testing.T) {
 	t.Run("batch fetches heads and transactions and sets them on the gas updater instance", func(t *testing.T) {
 		ethClient := new(mocks.Client)
 		config := new(gumocks.Config)
-		gu := gas.GasUpdaterToStruct(gas.NewGasUpdater(ethClient, config))
+		bhe := gas.BlockHistoryEstimatorFromInterface(gas.NewBlockHistoryEstimator(ethClient, config))
 
 		var blockDelay uint16 = 1
 		var historySize uint16 = 3
 		var batchSize uint32 = 2
-		config.On("GasUpdaterBlockDelay").Return(blockDelay)
-		config.On("GasUpdaterBlockHistorySize").Return(historySize)
+		config.On("BlockHistoryEstimatorBlockDelay").Return(blockDelay)
+		config.On("BlockHistoryEstimatorBlockHistorySize").Return(historySize)
 		// Test batching
-		config.On("GasUpdaterBatchSize").Return(batchSize)
+		config.On("BlockHistoryEstimatorBatchSize").Return(batchSize)
 
 		b41 := gas.Block{
 			Number:       41,
@@ -219,14 +219,14 @@ func TestGasUpdater_FetchBlocks(t *testing.T) {
 			elems[0].Result = &b43
 		})
 
-		err := gu.FetchBlocks(context.Background(), *cltest.Head(43))
+		err := bhe.FetchBlocks(context.Background(), *cltest.Head(43))
 		require.NoError(t, err)
 
-		assert.Len(t, gu.RollingBlockHistory(), 2)
-		assert.Equal(t, 41, int(gu.RollingBlockHistory()[0].Number))
-		assert.Equal(t, 43, int(gu.RollingBlockHistory()[1].Number))
-		assert.Len(t, gu.RollingBlockHistory()[0].Transactions, 2)
-		assert.Len(t, gu.RollingBlockHistory()[1].Transactions, 0)
+		assert.Len(t, bhe.RollingBlockHistory(), 2)
+		assert.Equal(t, 41, int(bhe.RollingBlockHistory()[0].Number))
+		assert.Equal(t, 43, int(bhe.RollingBlockHistory()[1].Number))
+		assert.Len(t, bhe.RollingBlockHistory()[0].Transactions, 2)
+		assert.Len(t, bhe.RollingBlockHistory()[1].Transactions, 0)
 
 		ethClient.AssertExpectations(t)
 
@@ -255,38 +255,38 @@ func TestGasUpdater_FetchBlocks(t *testing.T) {
 			elems[0].Result = &b44
 		})
 
-		err = gu.FetchBlocks(context.Background(), *cltest.Head(44))
+		err = bhe.FetchBlocks(context.Background(), *cltest.Head(44))
 		require.NoError(t, err)
 
-		assert.Len(t, gu.RollingBlockHistory(), 3)
-		assert.Equal(t, 42, int(gu.RollingBlockHistory()[0].Number))
-		assert.Equal(t, 43, int(gu.RollingBlockHistory()[1].Number))
-		assert.Equal(t, 44, int(gu.RollingBlockHistory()[2].Number))
-		assert.Len(t, gu.RollingBlockHistory()[0].Transactions, 1)
-		assert.Len(t, gu.RollingBlockHistory()[1].Transactions, 0)
-		assert.Len(t, gu.RollingBlockHistory()[2].Transactions, 1)
+		assert.Len(t, bhe.RollingBlockHistory(), 3)
+		assert.Equal(t, 42, int(bhe.RollingBlockHistory()[0].Number))
+		assert.Equal(t, 43, int(bhe.RollingBlockHistory()[1].Number))
+		assert.Equal(t, 44, int(bhe.RollingBlockHistory()[2].Number))
+		assert.Len(t, bhe.RollingBlockHistory()[0].Transactions, 1)
+		assert.Len(t, bhe.RollingBlockHistory()[1].Transactions, 0)
+		assert.Len(t, bhe.RollingBlockHistory()[2].Transactions, 1)
 
 		ethClient.AssertExpectations(t)
 		config.AssertExpectations(t)
 	})
 }
 
-func TestGasUpdater_FetchBlocksAndRecalculate(t *testing.T) {
+func TestBlockHistoryEstimator_FetchBlocksAndRecalculate(t *testing.T) {
 	t.Parallel()
 
 	ethClient := new(mocks.Client)
 	config := new(gumocks.Config)
 
-	config.On("GasUpdaterBlockDelay").Return(uint16(0))
-	config.On("GasUpdaterTransactionPercentile").Return(uint16(35))
-	config.On("GasUpdaterBlockHistorySize").Return(uint16(3))
+	config.On("BlockHistoryEstimatorBlockDelay").Return(uint16(0))
+	config.On("BlockHistoryEstimatorTransactionPercentile").Return(uint16(35))
+	config.On("BlockHistoryEstimatorBlockHistorySize").Return(uint16(3))
 	config.On("EthMaxGasPriceWei").Return(big.NewInt(1000))
 	config.On("EthMinGasPriceWei").Return(big.NewInt(0))
-	config.On("GasUpdaterBatchSize").Return(uint32(0))
+	config.On("BlockHistoryEstimatorBatchSize").Return(uint32(0))
 	config.On("ChainID").Return(big.NewInt(0))
 
-	guIface := gas.NewGasUpdater(ethClient, config)
-	gu := gas.GasUpdaterToStruct(guIface)
+	estimator := gas.NewBlockHistoryEstimator(ethClient, config)
+	bhe := gas.BlockHistoryEstimatorFromInterface(estimator)
 
 	b1 := gas.Block{
 		Number:       1,
@@ -316,17 +316,18 @@ func TestGasUpdater_FetchBlocksAndRecalculate(t *testing.T) {
 		elems[2].Result = &b3
 	})
 
-	config.On("SetEthGasPriceDefault", big.NewInt(100)).Return(nil)
+	bhe.FetchBlocksAndRecalculate(context.Background(), *cltest.Head(3))
 
-	gu.FetchBlocksAndRecalculate(context.Background(), *cltest.Head(3))
+	price := gas.GetGasPrice(bhe)
+	require.Equal(t, big.NewInt(100), price)
 
-	assert.Len(t, gu.RollingBlockHistory(), 3)
+	assert.Len(t, bhe.RollingBlockHistory(), 3)
 
 	config.AssertExpectations(t)
 	ethClient.AssertExpectations(t)
 }
 
-func TestGasUpdater_Recalculate(t *testing.T) {
+func TestBlockHistoryEstimator_Recalculate(t *testing.T) {
 	t.Parallel()
 
 	maxGasPrice := big.NewInt(100)
@@ -336,24 +337,24 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 		ethClient := new(mocks.Client)
 		config := new(gumocks.Config)
 
-		config.On("GasUpdaterTransactionPercentile").Return(uint16(35))
+		config.On("BlockHistoryEstimatorTransactionPercentile").Return(uint16(35))
 		config.On("EthMinGasPriceWei").Return(big.NewInt(1))
 		config.On("ChainID").Return(big.NewInt(0))
 
-		guIface := gas.NewGasUpdater(ethClient, config)
-		gu := gas.GasUpdaterToStruct(guIface)
+		estimator := gas.NewBlockHistoryEstimator(ethClient, config)
+		bhe := gas.BlockHistoryEstimatorFromInterface(estimator)
 
 		blocks := []gas.Block{}
-		gas.SetRollingBlockHistory(gu, blocks)
-		gu.Recalculate(*cltest.Head(1))
+		gas.SetRollingBlockHistory(bhe, blocks)
+		bhe.Recalculate(*cltest.Head(1))
 
 		blocks = []gas.Block{gas.Block{}}
-		gas.SetRollingBlockHistory(gu, blocks)
-		gu.Recalculate(*cltest.Head(1))
+		gas.SetRollingBlockHistory(bhe, blocks)
+		bhe.Recalculate(*cltest.Head(1))
 
 		blocks = []gas.Block{gas.Block{Transactions: []gas.Transaction{}}}
-		gas.SetRollingBlockHistory(gu, blocks)
-		gu.Recalculate(*cltest.Head(1))
+		gas.SetRollingBlockHistory(bhe, blocks)
+		bhe.Recalculate(*cltest.Head(1))
 
 		ethClient.AssertExpectations(t)
 		config.AssertExpectations(t)
@@ -365,11 +366,11 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 
 		config.On("EthMaxGasPriceWei").Return(maxGasPrice)
 		config.On("EthMinGasPriceWei").Return(minGasPrice)
-		config.On("GasUpdaterTransactionPercentile").Return(uint16(35))
+		config.On("BlockHistoryEstimatorTransactionPercentile").Return(uint16(35))
 		config.On("ChainID").Return(big.NewInt(0))
 
-		guIface := gas.NewGasUpdater(ethClient, config)
-		gu := gas.GasUpdaterToStruct(guIface)
+		estimator := gas.NewBlockHistoryEstimator(ethClient, config)
+		bhe := gas.BlockHistoryEstimatorFromInterface(estimator)
 
 		blocks := []gas.Block{
 			gas.Block{
@@ -384,10 +385,12 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 			},
 		}
 
-		config.On("SetEthGasPriceDefault", maxGasPrice).Return(nil)
-		gas.SetRollingBlockHistory(gu, blocks)
+		gas.SetRollingBlockHistory(bhe, blocks)
 
-		gu.Recalculate(*cltest.Head(1))
+		bhe.Recalculate(*cltest.Head(1))
+
+		price := gas.GetGasPrice(bhe)
+		require.Equal(t, maxGasPrice, price)
 
 		ethClient.AssertExpectations(t)
 		config.AssertExpectations(t)
@@ -399,11 +402,11 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 
 		config.On("EthMaxGasPriceWei").Return(maxGasPrice)
 		config.On("EthMinGasPriceWei").Return(minGasPrice)
-		config.On("GasUpdaterTransactionPercentile").Return(uint16(35))
+		config.On("BlockHistoryEstimatorTransactionPercentile").Return(uint16(35))
 		config.On("ChainID").Return(big.NewInt(0))
 
-		guIface := gas.NewGasUpdater(ethClient, config)
-		gu := gas.GasUpdaterToStruct(guIface)
+		estimator := gas.NewBlockHistoryEstimator(ethClient, config)
+		bhe := gas.BlockHistoryEstimatorFromInterface(estimator)
 
 		blocks := []gas.Block{
 			gas.Block{
@@ -418,10 +421,12 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 			},
 		}
 
-		config.On("SetEthGasPriceDefault", minGasPrice).Return(nil)
-		gas.SetRollingBlockHistory(gu, blocks)
+		gas.SetRollingBlockHistory(bhe, blocks)
 
-		gu.Recalculate(*cltest.Head(1))
+		bhe.Recalculate(*cltest.Head(1))
+
+		price := gas.GetGasPrice(bhe)
+		require.Equal(t, minGasPrice, price)
 
 		ethClient.AssertExpectations(t)
 		config.AssertExpectations(t)
@@ -433,11 +438,11 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 
 		config.On("EthMaxGasPriceWei").Return(maxGasPrice)
 		config.On("EthMinGasPriceWei").Return(minGasPrice)
-		config.On("GasUpdaterTransactionPercentile").Return(uint16(100))
+		config.On("BlockHistoryEstimatorTransactionPercentile").Return(uint16(100))
 		config.On("ChainID").Return(big.NewInt(0))
 
-		guIface := gas.NewGasUpdater(ethClient, config)
-		gu := gas.GasUpdaterToStruct(guIface)
+		estimator := gas.NewBlockHistoryEstimator(ethClient, config)
+		bhe := gas.BlockHistoryEstimatorFromInterface(estimator)
 
 		b1Hash := cltest.NewHash()
 		b2Hash := cltest.NewHash()
@@ -463,10 +468,12 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 			},
 		}
 
-		config.On("SetEthGasPriceDefault", big.NewInt(70)).Return(nil)
-		gas.SetRollingBlockHistory(gu, blocks)
+		gas.SetRollingBlockHistory(bhe, blocks)
 
-		gu.Recalculate(*cltest.Head(2))
+		bhe.Recalculate(*cltest.Head(2))
+
+		price := gas.GetGasPrice(bhe)
+		require.Equal(t, big.NewInt(70), price)
 
 		ethClient.AssertExpectations(t)
 		config.AssertExpectations(t)
@@ -479,11 +486,11 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 
 		config.On("EthMaxGasPriceWei").Return(maxGasPrice)
 		config.On("EthMinGasPriceWei").Return(big.NewInt(0))
-		config.On("GasUpdaterTransactionPercentile").Return(uint16(50))
+		config.On("BlockHistoryEstimatorTransactionPercentile").Return(uint16(50))
 		config.On("ChainID").Return(big.NewInt(0))
 
-		guIface := gas.NewGasUpdater(ethClient, config)
-		gu := gas.GasUpdaterToStruct(guIface)
+		estimator := gas.NewBlockHistoryEstimator(ethClient, config)
+		bhe := gas.BlockHistoryEstimatorFromInterface(estimator)
 
 		b1Hash := cltest.NewHash()
 
@@ -496,10 +503,12 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 			},
 		}
 
-		config.On("SetEthGasPriceDefault", big.NewInt(0)).Return(nil)
-		gas.SetRollingBlockHistory(gu, blocks)
+		gas.SetRollingBlockHistory(bhe, blocks)
 
-		gu.Recalculate(*cltest.Head(0))
+		bhe.Recalculate(*cltest.Head(0))
+
+		price := gas.GetGasPrice(bhe)
+		require.Equal(t, big.NewInt(0), price)
 
 		ethClient.AssertExpectations(t)
 		config.AssertExpectations(t)
@@ -511,11 +520,11 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 
 		config.On("EthMaxGasPriceWei").Return(maxGasPrice)
 		config.On("EthMinGasPriceWei").Return(big.NewInt(100))
-		config.On("GasUpdaterTransactionPercentile").Return(uint16(50))
+		config.On("BlockHistoryEstimatorTransactionPercentile").Return(uint16(50))
 		config.On("ChainID").Return(big.NewInt(100))
 
-		guIface := gas.NewGasUpdater(ethClient, config)
-		gu := gas.GasUpdaterToStruct(guIface)
+		estimator := gas.NewBlockHistoryEstimator(ethClient, config)
+		bhe := gas.BlockHistoryEstimatorFromInterface(estimator)
 
 		b1Hash := cltest.NewHash()
 
@@ -528,10 +537,12 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 			},
 		}
 
-		config.On("SetEthGasPriceDefault", big.NewInt(100)).Return(nil)
-		gas.SetRollingBlockHistory(gu, blocks)
+		gas.SetRollingBlockHistory(bhe, blocks)
 
-		gu.Recalculate(*cltest.Head(0))
+		bhe.Recalculate(*cltest.Head(0))
+
+		price := gas.GetGasPrice(bhe)
+		require.Equal(t, big.NewInt(100), price)
 
 		ethClient.AssertExpectations(t)
 		config.AssertExpectations(t)
@@ -547,11 +558,11 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 
 		config.On("EthMaxGasPriceWei").Return(reasonablyHugeGasPrice)
 		config.On("EthMinGasPriceWei").Return(big.NewInt(10))
-		config.On("GasUpdaterTransactionPercentile").Return(uint16(50))
+		config.On("BlockHistoryEstimatorTransactionPercentile").Return(uint16(50))
 		config.On("ChainID").Return(big.NewInt(0))
 
-		guIface := gas.NewGasUpdater(ethClient, config)
-		gu := gas.GasUpdaterToStruct(guIface)
+		estimator := gas.NewBlockHistoryEstimator(ethClient, config)
+		bhe := gas.BlockHistoryEstimatorFromInterface(estimator)
 
 		unreasonablyHugeGasPrice := big.NewInt(0).Mul(big.NewInt(math.MaxInt64), big.NewInt(1000000))
 
@@ -576,17 +587,19 @@ func TestGasUpdater_Recalculate(t *testing.T) {
 			},
 		}
 
-		config.On("SetEthGasPriceDefault", reasonablyHugeGasPrice).Return(nil)
-		gas.SetRollingBlockHistory(gu, blocks)
+		gas.SetRollingBlockHistory(bhe, blocks)
 
-		gu.Recalculate(*cltest.Head(0))
+		bhe.Recalculate(*cltest.Head(0))
+
+		price := gas.GetGasPrice(bhe)
+		require.Equal(t, reasonablyHugeGasPrice, price)
 
 		ethClient.AssertExpectations(t)
 		config.AssertExpectations(t)
 	})
 }
 
-func TestGasUpdater_Block(t *testing.T) {
+func TestBlockHistoryEstimator_Block(t *testing.T) {
 	blockJSON := `
 {
     "author": "0x1438087186fdbfd4c256fa2df446921e30e54df8",
