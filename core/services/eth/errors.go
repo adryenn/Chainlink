@@ -155,6 +155,7 @@ func (s *SendError) IsTooExpensive() bool {
 
 // IsFeeTooLow is an optimism-specific error returned when total fee is too low
 // TODO: Add test
+// TODO: Add is fee too high error - see https://www.notion.so/How-to-pay-Fees-in-Optimistic-Ethereum-f706f4e5b13e460fa5671af48ce9a695
 func (s *SendError) IsFeeTooLow() bool {
 	return s.is(FeeTooLow)
 }
