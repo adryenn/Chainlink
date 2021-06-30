@@ -95,6 +95,7 @@ type TxManager interface {
 	service.Service
 	Trigger(addr common.Address)
 	CreateEthTransaction(db *gorm.DB, fromAddress, toAddress common.Address, payload []byte, gasLimit uint64, meta interface{}, strategy TxStrategy) (etx models.EthTx, err error)
+	GetEstimator() gas.Estimator
 }
 
 type BulletproofTxManager struct {
@@ -333,6 +334,10 @@ RETURNING "eth_txes".*
 	return
 }
 
+func (b *BulletproofTxManager) GetEstimator() gas.Estimator {
+	return b.estimator
+}
+
 const optimismGasPrice int64 = 1e9 // 1 GWei
 
 // SendEther creates a transaction that transfers the given value of ether
@@ -494,5 +499,6 @@ func (n *NullTxManager) Trigger(common.Address)                         { panic(
 func (n *NullTxManager) CreateEthTransaction(*gorm.DB, common.Address, common.Address, []byte, uint64, interface{}, TxStrategy) (etx models.EthTx, err error) {
 	return etx, errors.New(n.ErrMsg)
 }
-func (n *NullTxManager) Healthy() error { return nil }
-func (n *NullTxManager) Ready() error   { return nil }
+func (n *NullTxManager) Healthy() error              { return nil }
+func (n *NullTxManager) Ready() error                { return nil }
+func (n *NullTxManager) GetEstimator() gas.Estimator { return nil }

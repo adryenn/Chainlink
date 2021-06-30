@@ -1973,13 +1973,15 @@ func TestIntegration_DirectRequest(t *testing.T) {
 	require.Empty(t, run.PipelineTaskRuns[2].Error)
 }
 
-func TestIntegration_GasUpdater(t *testing.T) {
+func TestIntegration_BlockHistoryEstimator(t *testing.T) {
 	t.Parallel()
+
+	var initialDefaultGasPrice int64 = 5000000000
 
 	c, cfgCleanup := cltest.NewConfig(t)
 	defer cfgCleanup()
-	c.Set("ETH_GAS_PRICE_DEFAULT", 5000000000)
-	c.Set("GAS_UPDATER_ENABLED", true)
+	c.Set("ETH_GAS_PRICE_DEFAULT", initialDefaultGasPrice)
+	c.Set("GAS_ESTIMATOR_MODE", "BlockHistory")
 	c.Set("GAS_UPDATER_BLOCK_DELAY", 0)
 	c.Set("GAS_UPDATER_BLOCK_HISTORY_SIZE", 2)
 	// Limit the headtracker backfill depth just so we aren't here all week
@@ -2023,7 +2025,7 @@ func TestIntegration_GasUpdater(t *testing.T) {
 	// Nonce syncer
 	ethClient.On("PendingNonceAt", mock.Anything, mock.Anything).Maybe().Return(uint64(0), nil)
 
-	// GasUpdater boot calls
+	// BlockHistoryEstimator boot calls
 	ethClient.On("HeaderByNumber", mock.Anything, mock.AnythingOfType("*big.Int")).Return(&h42, nil)
 	ethClient.On("BatchCallContext", mock.Anything, mock.MatchedBy(func(b []rpc.BatchElem) bool {
 		return len(b) == 2 &&
@@ -2047,9 +2049,14 @@ func TestIntegration_GasUpdater(t *testing.T) {
 		t.Fatal("timed out waiting for app to subscribe")
 	}
 
-	assert.Equal(t, "41500000000", app.Config.EthGasPriceDefault().String())
+	estimator := app.TxManager.GetEstimator()
+	gasPrice, gasLimit, err := estimator.EstimateGas(nil, 500000)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(500000), gasLimit)
+	assert.Equal(t, "41500000000", gasPrice.String())
+	assert.Equal(t, initialDefaultGasPrice, app.Config.EthGasPriceDefault().Int64()) // unchanged
 
-	// GasUpdater new blocks
+	// BlockHistoryEstimator new blocks
 	ethClient.On("BatchCallContext", mock.Anything, mock.MatchedBy(func(b []rpc.BatchElem) bool {
 		return len(b) == 2 &&
 			b[0].Method == "eth_getBlockByNumber" && b[0].Args[0] == "0x2a" &&
@@ -2068,7 +2075,9 @@ func TestIntegration_GasUpdater(t *testing.T) {
 	newHeads <- cltest.Head(43)
 
 	gomega.NewGomegaWithT(t).Eventually(func() string {
-		return c.EthGasPriceDefault().String()
+		gasPrice, _, err := estimator.EstimateGas(nil, 500000)
+		require.NoError(t, err)
+		return gasPrice.String()
 	}, cltest.DBWaitTimeout, cltest.DBPollingInterval).Should(gomega.Equal("45000000000"))
 }
 

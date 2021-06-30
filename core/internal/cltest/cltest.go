@@ -191,8 +191,8 @@ func NewConfig(t testing.TB) (*TestConfig, func()) {
 
 	wsserver, url, cleanup := newWSServer()
 	config := NewConfigWithWSServer(t, url, wsserver)
-	// Disable gas updater for application tests
-	config.Set("GAS_UPDATER_ENABLED", false)
+	// Disable block history estimator for application tests
+	config.Set("GAS_ESTIMATOR_MODE", "FixedPrice")
 	// Disable tx re-sending for application tests
 	config.Set("ETH_TX_RESEND_AFTER_THRESHOLD", 0)
 	// Limit ETH_FINALITY_DEPTH to avoid useless extra work backfilling heads
