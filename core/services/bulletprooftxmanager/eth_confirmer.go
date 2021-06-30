@@ -788,6 +788,7 @@ func (ec *EthConfirmer) attemptForRebroadcast(ctx context.Context, etx models.Et
 			// Instead try to resubmit the same attempt at the same price, in the hope that the wallet was funded since our last attempt
 			logger.Debugw("EthConfirmer: rebroadcast InsufficientEth", "ethTxID", etx.ID, "ethTxAttemptID", previousAttempt.ID, "nonce", etx.Nonce, "txHash", previousAttempt.Hash)
 			previousAttempt.State = models.EthTxAttemptInProgress
+			// TODO: Handle optimism case here
 			return previousAttempt, nil
 		}
 		bumpedGasPrice, bumpedGasLimit, err = ec.estimator.BumpGas(previousAttempt.GasPrice.ToInt(), etx.GasLimit)

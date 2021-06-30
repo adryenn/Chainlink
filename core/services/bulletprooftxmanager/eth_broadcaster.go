@@ -371,7 +371,6 @@ func (eb *EthBroadcaster) handleInProgressEthTx(etx models.EthTx, attempt models
 		sendError = nil
 	}
 
-	// TODO: Handle optimism case here
 	if sendError.IsInsufficientEth() {
 		logger.Errorw(fmt.Sprintf("EthBroadcaster: EthTxAttempt %v (hash 0x%x) at gas price (%s Wei) was rejected due to insufficient eth. "+
 			"The eth node returned %s. "+
